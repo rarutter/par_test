@@ -12,6 +12,7 @@ libs = Split("""netcdf_c++
 #if doesn't work, try adding 'z' 'm' and 'sz' to libs.
 
 src_files = "parNC.cpp"
+#src_files = "tst_compounds.c"
 
 compiler = 'g++'
 
