@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <iostream>
 
-//#include <mpi.h>
+#include <mpi.h>
 
 //cohort id, temperature, time
 #define NDIMS 2 
@@ -55,10 +55,26 @@ int main(int argc, char **argv){
   struct gridcell{
     int year;
     int Nitrogen;
+    int cellID;
   };
-  struct gridcell test_cell;
-  test_cell.year = 2006;
-  test_cell.Nitrogen = 72;
+  struct gridcell test_cells[2][2];
+  test_cells[0][0].cellID = 0;
+  test_cells[0][0].year = 2006;
+  test_cells[0][0].Nitrogen = 72;
+
+  test_cells[0][1].cellID = 1;
+  test_cells[0][1].year = 2006;
+  test_cells[0][1].Nitrogen = 26;
+
+  test_cells[1][0].cellID = 0;
+  test_cells[1][0].year = 2007;
+  test_cells[1][0].Nitrogen = 55;
+
+  test_cells[1][1].cellID = 1;
+  test_cells[1][1].year = 2007;
+  test_cells[1][1].Nitrogen = 90;
+
+
   struct gridcell test_cell2;
   test_cell2.year = 2007;
   test_cell2.Nitrogen = 83;
@@ -67,10 +83,12 @@ int main(int argc, char **argv){
   //Basic definitions
   int ncid;//for file
   int cid_dimid, time_dimid; //dimensions
-  int varid; //for something? this might be Nid...
+  int varid, varid2; //for something? this might be Nid...
 //  int Nid;
   // int retval;//for error handling - need to do
 
+  //Arrays for holding indices for writing to unlimited dimensions?
+  size_t start[NDIMS], count[NDIMS];
 
      /* When we create netCDF variables and dimensions, we get back an
  *     * ID for each one. */
@@ -104,27 +122,26 @@ int main(int argc, char **argv){
     * with a non-zero return code. */
    /* Create the file. The NC_CLOBBER parameter tells netCDF to
     * overwrite this file, if it already exists.*/
-  if ((retval = nc_create(FILE_NAME, NC_CLOBBER|NC_NETCDF4, &ncid)))
+  if ((retval = nc_create(FILE_NAME, NC_CLOBBER|NC_NETCDF4|NC_MPIIO, &ncid)))
     ERR(retval);
 
 
   //Compound type definition
   //std::cout<<"size: "<<sizeof(struct gridcell)<<std::endl;
   if(nc_def_compound(ncid, sizeof(struct gridcell), CELL, &compoundtypeid)) ERR_2;
+  if(nc_insert_compound(ncid, compoundtypeid, "Cell id",
+                        NC_COMPOUND_OFFSET(struct gridcell, cellID), NC_INT)) ERR_2;
   if(nc_insert_compound(ncid, compoundtypeid, "Year",
                         NC_COMPOUND_OFFSET(struct gridcell, year), NC_INT)) ERR_2;
   if(nc_insert_compound(ncid, compoundtypeid, "NPool",
                         NC_COMPOUND_OFFSET(struct gridcell, Nitrogen), NC_INT)) ERR_2;
 
-  if(nc_def_var(ncid, "Something", compoundtypeid, 0, NULL, &varid)) ERR_2;
-  if(nc_put_var(ncid, varid, &test_cell)) ERR_2;
-  //if(nc_put_var(ncid, varid, &test_cell2)) ERR_2;
 
   // //Define dimensions - will return ID for each
   // if((retval = nc_def_dim(ncid, "cID", NCHTS, &cid_dimid)))
   //   ERR(retval);
-  // if((retval = nc_def_dim(ncid, "time", NC_UNLIMITED, &time_dimid)))
-  //   ERR(retval);
+  //if((retval = nc_def_dim(ncid, "time", NC_UNLIMITED, &time_dimid)))
+  //  ERR(retval);
 
    /* Define the dimensions. NetCDF will hand back an ID for each. */
   if ((retval = nc_def_dim(ncid, "time", NX, &time_dimid)))
@@ -140,34 +157,47 @@ int main(int argc, char **argv){
   dimids[0] = time_dimid;
   dimids[1] = cid_dimid;
 
+  if(nc_def_var(ncid, "Data", compoundtypeid, 2, &dimids[0], &varid)) ERR_2;
+  if(nc_def_var(ncid, "Something2", compoundtypeid, 0, NULL, &varid2)) ERR_2;
 
+  //if(nc_put_var(ncid, varid2, &test_cell2)) ERR_2;
+  //if(nc_put_var(ncid, varid, &test_cells[0])) ERR_2;
 
+  //
+  count[0] = 2;//number of timesteps?
+  count[1] = 2;//number of cohorts
+  start[0] = 0;
+  start[1] = 0;
+
+  if(nc_put_vara(ncid, 0, start, count, &test_cells)) ERR_2;
+
+  //for(int timestep=0; timestep<2; timestep++){
+  //  start[0] = timestep;
+  //  if(nc_put_vara(ncid, 0, start, count, &test_cells)) ERR_2;
+  //}
+  //
+  
   // if((retval = nc_def_var(ncid, "Npool", NC_INT, NDIMS, dimids, &Nid)))
   //   ERR(retval);
-   /* Define the variable. The type of the variable in this case is
- *     * NC_INT (4-byte integer). */
+  /* Define the variable. The type of the variable in this case is
+   * NC_INT (4-byte integer). */
   //if ((retval = nc_def_var(ncid, "data", NC_INT, NDIMS, 
   //                         dimids, &varid)))
   //  ERR(retval);
-
-    
+ 
   //End metadata definition
   //  if((retval = nc_enddef(ncid)))
   //    ERR(retval);
 
-
-  // if((retval = nc_put_var_float(ncid, Nid, &Ns[0][0])))
-  //   ERR(retval);
-   /* Write the pretend data to the file. Although netCDF supports
- *     * reading and writing subsets of data, in this case we write all
- *         * the data in one operation. */
+  /* Write the pretend data to the file. Although netCDF supports
+   * reading and writing subsets of data, in this case we write all
+   * the data in one operation. */
   //if ((retval = nc_put_var_int(ncid, varid, &data_out[0][0])))
   //  ERR(retval);
 
 
-
    /* Close the file. This frees up any internal netCDF resources
- *     * associated with the file, and flushes any buffers. */
+    * associated with the file, and flushes any buffers. */
   if ((retval = nc_close(ncid)))
     ERR(retval);
 
